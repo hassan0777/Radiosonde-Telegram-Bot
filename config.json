@@ -1,12 +1,12 @@
 {
     "telegram": {
-        "bot_token": "YOUR_BOT_TOKEN_HERE",
-        "chat_id": "YOUR_CHAT_ID_HERE"
+        "bot_token": "YOUR_BOT_TOKEN",
+        "admin_chat_id": "YOUR_CHAT_ID"
     },
     "monitoring": {
         "target_latitude": 44.4268,
         "target_longitude": 26.1025,
-        "radius_km": 20.0,
+        "radius_km": 15.0,
         "check_interval_seconds": 60,
         "min_altitude_m": 0,
         "max_altitude_m": 30000
