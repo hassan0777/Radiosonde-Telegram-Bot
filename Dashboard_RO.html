@@ -1,1 +1,1317 @@
-PLACEHOLDER FOR ROMANIAN DASHBOARD
+<!DOCTYPE html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panou Control Radiosonde</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      :root {
+        --bg-primary: #121212;
+        --bg-secondary: #1e1e1e;
+        --bg-tertiary: #252525;
+        --text-primary: #e0e0e0;
+        --text-secondary: #a0a0a0;
+        --accent: #3a6df0;
+        --accent-hover: #2855de;
+        --success: #4caf50;
+        --warning: #ff9800;
+        --danger: #f44336;
+        --border-color: #333;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header {
+        background-color: var(--bg-secondary);
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .header h1 {
+        font-size: 1.8rem;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .header h1 i {
+        color: var(--accent);
+      }
+
+      .header-buttons {
+        display: flex;
+        gap: 12px;
+      }
+
+      .header-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: var(--bg-tertiary);
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: all 0.2s ease;
+      }
+
+      .header-btn:hover {
+        background-color: var(--accent);
+        color: white;
+        transform: translateY(-2px);
+      }
+
+      .dashboard-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .sidebar {
+        width: 320px;
+        background-color: var(--bg-secondary);
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+
+      .tab-buttons {
+        display: flex;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .tab-btn {
+        flex: 1;
+        padding: 12px;
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+      }
+
+      .tab-btn:hover {
+        background-color: var(--bg-tertiary);
+      }
+
+      .tab-btn.active {
+        color: var(--accent);
+        border-bottom: 2px solid var(--accent);
+        background-color: var(--bg-tertiary);
+      }
+
+      .tab-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+      }
+
+      .tab-pane {
+        display: none;
+      }
+
+      .tab-pane.active {
+        display: block;
+      }
+
+      .file-list {
+        list-style: none;
+      }
+
+      .file-item {
+        padding: 10px 12px;
+        background-color: var(--bg-tertiary);
+        border-radius: 4px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .file-item:hover {
+        background-color: #2d2d2d;
+      }
+
+      .file-item.active {
+        background-color: #2d2d2d;
+        border-left: 3px solid var(--accent);
+      }
+
+      .file-content {
+        flex: 1;
+        padding: 15px;
+        overflow-y: auto;
+        background-color: var(--bg-secondary);
+      }
+
+      .file-content pre {
+        background-color: var(--bg-tertiary);
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+        color: var(--text-primary);
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        max-height: 300px;
+      }
+
+      .subscriber-list {
+        list-style: none;
+      }
+
+      .subscriber-item {
+        padding: 12px;
+        background-color: var(--bg-tertiary);
+        border-radius: 4px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .subscriber-info {
+        flex: 1;
+      }
+
+      .subscriber-name {
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+
+      .subscriber-details {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+      }
+
+      .subscriber-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .btn {
+        padding: 6px 12px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-size: 0.8rem;
+        transition: all 0.2s;
+      }
+
+      .btn-danger {
+        background-color: var(--danger);
+        color: white;
+      }
+
+      .btn-danger:hover {
+        background-color: #d32f2f;
+      }
+
+      .stats-panel {
+        padding: 15px;
+        background-color: var(--bg-tertiary);
+        border-radius: 4px;
+        margin-bottom: 15px;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .stat-item {
+        text-align: center;
+      }
+
+      .stat-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+
+      .stat-value {
+        font-size: 1.2rem;
+        font-weight: 600;
+      }
+
+      .map-panel {
+        height: 40%;
+        background-color: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .panel-header {
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: var(--bg-tertiary);
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .panel-header h2 {
+        font-size: 1.1rem;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .panel-content {
+        flex: 1;
+        position: relative;
+      }
+
+      #map {
+        height: 100%;
+        width: 100%;
+      }
+
+      .charts-container {
+        height: 60%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 1px;
+        background-color: var(--border-color);
+        overflow: hidden;
+      }
+
+      .chart-panel {
+        background-color: var(--bg-secondary);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .chart-panel .panel-header {
+        padding: 10px 15px;
+      }
+
+      .chart-panel .panel-content {
+        padding: 10px;
+      }
+
+      /* Map controls */
+      .map-controls {
+        display: flex;
+        gap: 8px;
+      }
+
+      .map-style-btn {
+        background-color: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.75rem;
+      }
+
+      .map-style-btn:hover {
+        background-color: #2d2d2d;
+      }
+
+      .map-style-btn.active {
+        background-color: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
+
+      /* Scrollbar styling */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--bg-secondary);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--bg-tertiary);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 1200px) {
+        .sidebar {
+          width: 280px;
+        }
+
+        .stats-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 992px) {
+        .dashboard-container {
+          flex-direction: column;
+        }
+
+        .sidebar {
+          width: 100%;
+          height: auto;
+          max-height: 40vh;
+          border-right: none;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .file-content {
+          height: 60vh;
+        }
+
+        .header {
+          flex-direction: column;
+          gap: 15px;
+          padding: 15px;
+        }
+
+        .header-buttons {
+          align-self: flex-end;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .charts-container {
+          grid-template-columns: 1fr;
+          grid-template-rows: repeat(4, 1fr);
+        }
+
+        .header h1 {
+          font-size: 1.5rem;
+        }
+
+        .header-buttons {
+          gap: 8px;
+        }
+
+        .header-btn {
+          width: 36px;
+          height: 36px;
+        }
+
+        .map-controls {
+          flex-direction: column;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .header {
+          flex-direction: column;
+          gap: 10px;
+          text-align: center;
+        }
+
+        .header-buttons {
+          align-self: center;
+        }
+
+        .header h1 {
+          font-size: 1.3rem;
+        }
+
+        .tab-buttons {
+          flex-direction: column;
+        }
+      }
+
+      .json-key {
+        color: #9cdcfe;
+      }
+
+      .json-string {
+        color: #ce9178;
+      }
+
+      .json-number {
+        color: #b5cea8;
+      }
+
+      .json-boolean {
+        color: #569cd6;
+      }
+
+      .json-null {
+        color: #569cd6;
+      }
+
+      .no-data {
+        padding: 20px;
+        text-align: center;
+        color: var(--text-secondary);
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>
+        <i class="fas fa-satellite"></i>Panou Control Radiosonde
+      </h1>
+      <div class="header-buttons">
+        <button id="refreshBtn" class="header-btn" title="Reîncarcă Date">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+        <div class="header-btn" title="Reîmprospătare Automată: ACTIVATĂ" id="autoRefreshToggle">
+          <i class="fas fa-circle"></i>
+        </div>
+      </div>
+    </div>
+    <div class="dashboard-container">
+      <div class="sidebar">
+        <div class="tab-buttons">
+          <button class="tab-btn active" data-tab="files">Fișiere</button>
+          <button class="tab-btn" data-tab="subscribers">Abonați</button>
+          <button class="tab-btn" data-tab="stats">Statistici</button>
+        </div>
+        <div class="tab-content">
+          <div class="tab-pane active" id="files-tab">
+            <h3>Fișiere Bot</h3>
+            <ul class="file-list" id="fileList">
+              <li class="file-item" data-file="config.json">
+                <i class="fas fa-cog"></i> config.json
+              </li>
+              <li class="file-item" data-file="subscriptions.json">
+                <i class="fas fa-users"></i> subscriptions.json
+              </li>
+              <li class="file-item" data-file="bot.log">
+                <i class="fas fa-scroll"></i> bot/radiosonde_notifier.log
+              </li>
+            </ul>
+            <h3 style="margin-top: 20px;">Jurnale Sonde</h3>
+            <ul class="file-list" id="sondeFilesList">
+              <!-- Fișierele sondei vor fi încărcate aici -->
+            </ul>
+          </div>
+          <div class="tab-pane" id="subscribers-tab">
+            <h3>Utilizatori Abonați</h3>
+            <div id="subscribersContainer">
+              <!-- Abonații vor fi încărcați aici -->
+            </div>
+          </div>
+          <div class="tab-pane" id="stats-tab">
+            <h3>Statistici Bot</h3>
+            <div class="stats-panel">
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-label">Total Abonați</div>
+                  <div class="stat-value" id="totalSubscribers">0</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Sonde Active</div>
+                  <div class="stat-value" id="activeSondes">0</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Total Fișiere Jurnal</div>
+                  <div class="stat-value" id="totalLogFiles">0</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Ultima Actualizare</div>
+                  <div class="stat-value" id="lastUpdated">Niciodată</div>
+                </div>
+              </div>
+            </div>
+            <h3>Zonă de Monitorizare</h3>
+            <div id="monitoringConfig">
+              <!-- Configurația de monitorizare va fi încărcată aici -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="file-content">
+        <div id="fileViewer">
+          <div class="panel-header">
+            <h2>
+              <i class="fas fa-file"></i> Conținut Fișier
+            </h2>
+          </div>
+          <div class="panel-content">
+            <pre id="fileContent">Selectează un fișier pentru a vedea conținutul</pre>
+          </div>
+        </div>
+        <div class="map-panel">
+          <div class="panel-header">
+            <h2>
+              <i class="fas fa-map-marked-alt"></i> Locații Sonde
+            </h2>
+            <div class="map-controls">
+              <button class="map-style-btn active" data-style="dark">Întunecat</button>
+              <button class="map-style-btn" data-style="light">Luminos</button>
+              <button class="map-style-btn" data-style="terrain">Relief</button>
+              <button class="map-style-btn" data-style="satellite">Satelit</button>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div id="map"></div>
+          </div>
+        </div>
+        <div class="charts-container">
+          <div class="chart-panel">
+            <div class="panel-header">
+              <h2>
+                <i class="fas fa-chart-line"></i> Analiză Altitudine
+              </h2>
+            </div>
+            <div class="panel-content">
+              <canvas id="altitudeChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-panel">
+            <div class="panel-header">
+              <h2>
+                <i class="fas fa-chart-line"></i> Analiză Viteză
+              </h2>
+            </div>
+            <div class="panel-content">
+              <canvas id="speedChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-panel">
+            <div class="panel-header">
+              <h2>
+                <i class="fas fa-chart-line"></i> Viteză Verticală
+              </h2>
+            </div>
+            <div class="panel-content">
+              <canvas id="velocityChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-panel">
+            <div class="panel-header">
+              <h2>
+                <i class="fas fa-chart-line"></i> Analiză Direcție
+              </h2>
+            </div>
+            <div class="panel-content">
+              <canvas id="directionChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Configurație hartă
+      const mapStyles = {
+        dark: {
+          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          attribution: '&copy;  < a href = "https://www.openstreetmap.org/copyright" > OpenStreetMap < /a> contributors &copy;  < a href = "https://carto.com/attributions" > CARTO < /a>'
+        },
+        light: {
+          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          attribution: '&copy;  < a href = "https://www.openstreetmap.org/copyright" > OpenStreetMap < /a> contributors'
+        },
+        terrain: {
+          url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+          attribution: 'Date hartă: &copy;  < a href = "https://www.openstreetmap.org/copyright" > OpenStreetMap < /a> contributors,  < a href = "http://viewfinderpanoramas.org" > SRTM < /a> | Stil hartă: &copy;  < a href = "https://openttopomap.org" > OpenTopoMap < /a>'
+        },
+        satellite: {
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          attribution: 'Tile-uri &copy; Esri &mdash; Sursa: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, și GIS User Community'
+        }
+      };
+      // Variabile globale
+      let map;
+      let mapLayer;
+      let altitudeChart, speedChart, velocityChart, directionChart;
+      let autoRefreshInterval;
+      let autoRefreshEnabled = true;
+      let currentSondeData = {};
+      let configData = {};
+      let sondeFiles = [];
+      // Inițializează aplicația
+      function init() {
+        initMap();
+        createCharts();
+        setupEventListeners();
+        loadAllData();
+        startAutoRefresh();
+      }
+      // Inițializează harta cu tema întunecată
+      function initMap() {
+        map = L.map('map').setView([44.4268, 26.1025], 10);
+        setMapStyle('dark');
+        // Adaugă control pentru scară
+        L.control.scale({
+          metric: true,
+          imperial: false
+        }).addTo(map);
+      }
+      // Setează stilul hărții
+      function setMapStyle(style) {
+        if (mapLayer) {
+          map.removeLayer(mapLayer);
+        }
+        mapLayer = L.tileLayer(mapStyles[style].url, {
+          attribution: mapStyles[style].attribution,
+          maxZoom: 18
+        }).addTo(map);
+        // Actualizează starea butonului activ
+        document.querySelectorAll('.map-style-btn').forEach(btn => {
+          if (btn.dataset.style === style) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+      // Creează toate graficele
+      function createCharts() {
+        // Grafic altitudine
+        const altCtx = document.getElementById('altitudeChart').getContext('2d');
+        altitudeChart = new Chart(altCtx, {
+          type: 'line',
+          data: {
+            datasets: []
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Altitudine vs Timp',
+                color: '#e0e0e0'
+              },
+              legend: {
+                display: false
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false
+              }
+            },
+            scales: {
+              x: {
+                type: 'linear',
+                title: {
+                  display: true,
+                  text: 'Timp (minute de la lansare)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'Altitudine (m)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              }
+            }
+          }
+        });
+        // Grafic viteză
+        const speedCtx = document.getElementById('speedChart').getContext('2d');
+        speedChart = new Chart(speedCtx, {
+          type: 'line',
+          data: {
+            datasets: []
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Viteză Orizontală vs Timp',
+                color: '#e0e0e0'
+              },
+              legend: {
+                display: false
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false
+              }
+            },
+            scales: {
+              x: {
+                type: 'linear',
+                title: {
+                  display: true,
+                  text: 'Timp (minute de la lansare)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'Viteză Orizontală (km/h)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              }
+            }
+          }
+        });
+        // Grafic viteză verticală
+        const velocityCtx = document.getElementById('velocityChart').getContext('2d');
+        velocityChart = new Chart(velocityCtx, {
+          type: 'line',
+          data: {
+            datasets: []
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Viteză Verticală vs Timp',
+                color: '#e0e0e0'
+              },
+              legend: {
+                display: false
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false
+              }
+            },
+            scales: {
+              x: {
+                type: 'linear',
+                title: {
+                  display: true,
+                  text: 'Timp (minute de la lansare)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'Viteză Verticală (m/s)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              }
+            }
+          }
+        });
+        // Grafic direcție
+        const directionCtx = document.getElementById('directionChart').getContext('2d');
+        directionChart = new Chart(directionCtx, {
+          type: 'scatter',
+          data: {
+            datasets: []
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Analiză Direcție',
+                color: '#e0e0e0'
+              },
+              legend: {
+                display: false
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false
+              }
+            },
+            scales: {
+              x: {
+                type: 'linear',
+                title: {
+                  display: true,
+                  text: 'Timp (minute de la lansare)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              },
+              y: {
+                type: 'linear',
+                min: 0,
+                max: 360,
+                title: {
+                  display: true,
+                  text: 'Direcție (°)',
+                  color: '#a0a0a0'
+                },
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#a0a0a0'
+                }
+              }
+            }
+          }
+        });
+      }
+      // Setează ascultătorii de evenimente
+      function setupEventListeners() {
+        // Butoane file
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            // Actualizează butonul de filă activ
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            // Arată conținutul corect al filei
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+            document.getElementById(`${tab}-tab`).classList.add('active');
+          });
+        });
+        // Elemente listă fișiere
+        document.getElementById('fileList').addEventListener('click', (e) => {
+          const fileItem = e.target.closest('.file-item');
+          if (fileItem) {
+            // Actualizează fișierul activ
+            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('active'));
+            fileItem.classList.add('active');
+            // Încarcă conținutul fișierului
+            const fileName = fileItem.dataset.file;
+            loadFileContent(fileName);
+          }
+        });
+        // Listă fișiere sonde
+        document.getElementById('sondeFilesList').addEventListener('click', (e) => {
+          const fileItem = e.target.closest('.file-item');
+          if (fileItem) {
+            // Actualizează fișierul activ
+            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('active'));
+            fileItem.classList.add('active');
+            // Încarcă conținutul fișierului sondei
+            const fileName = fileItem.dataset.file;
+            loadSondeFileContent(fileName);
+          }
+        });
+        // Buton reîmprospătare
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+          loadAllData();
+        });
+        // Comutator reîmprospătare automată
+        document.getElementById('autoRefreshToggle').addEventListener('click', () => {
+          autoRefreshEnabled = !autoRefreshEnabled;
+          const icon = document.querySelector('#autoRefreshToggle i');
+          if (autoRefreshEnabled) {
+            icon.className = 'fas fa-circle';
+            document.getElementById('autoRefreshToggle').title = 'Reîmprospătare Automată: ACTIVATĂ';
+            startAutoRefresh();
+          } else {
+            icon.className = 'fas fa-circle-notch';
+            document.getElementById('autoRefreshToggle').title = 'Reîmprospătare Automată: DEZACTIVATĂ';
+            stopAutoRefresh();
+          }
+        });
+        // Butoane stil hartă
+        document.querySelectorAll('.map-style-btn').forEach(btn => {
+          btn.addEventListener('click', () => setMapStyle(btn.dataset.style));
+        });
+      }
+      // Pornește reîmprospătarea automată
+      function startAutoRefresh() {
+        stopAutoRefresh();
+        if (autoRefreshEnabled) {
+          autoRefreshInterval = setInterval(loadAllData, 10000); // Reîmprospătează la fiecare 10 secunde
+        }
+      }
+      // Oprește reîmprospătarea automată
+      function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+        }
+      }
+      // Încarcă toate datele
+      async function loadAllData() {
+        try {
+          // Actualizează ora ultimei actualizări
+          document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+          // Încarcă config
+          await loadConfig();
+          // Încarcă abonați
+          await loadSubscribers();
+          // Încarcă jurnal bot
+          await loadBotLog();
+          // Încarcă lista fișierelor sonde
+          await loadSondeFilesList();
+          // Actualizează statistici
+          updateStatistics();
+        } catch (error) {
+          console.error('Eroare la încărcarea datelor:', error);
+        }
+      }
+      // Încarcă fișierul de configurare
+      async function loadConfig() {
+        try {
+          const response = await fetch('config.json');
+          if (response.ok) {
+            configData = await response.json();
+            displayFileContent('config.json', JSON.stringify(configData, null, 2));
+            // Actualizează configurația de monitorizare în fila statistici
+            const monitoringConfig = configData.monitoring || {};
+            document.getElementById('monitoringConfig').innerHTML = `
+
+					<div class="stats-panel">
+						<div class="stats-grid">
+							<div class="stat-item">
+								<div class="stat-label">Latitudine Țintă</div>
+								<div class="stat-value">${monitoringConfig.target_latitude || 'N/A'}</div>
+							</div>
+							<div class="stat-item">
+								<div class="stat-label">Longitudine Țintă</div>
+								<div class="stat-value">${monitoringConfig.target_longitude || 'N/A'}</div>
+							</div>
+							<div class="stat-item">
+								<div class="stat-label">Rază</div>
+								<div class="stat-value">${monitoringConfig.radius_km || 'N/A'} km</div>
+							</div>
+							<div class="stat-item">
+								<div class="stat-label">Altitudine Minimă</div>
+								<div class="stat-value">${monitoringConfig.min_altitude_m || 'N/A'} m</div>
+							</div>
+							<div class="stat-item">
+								<div class="stat-label">Altitudine Maximă</div>
+								<div class="stat-value">${monitoringConfig.max_altitude_m || 'N/A'} m</div>
+							</div>
+						</div>
+					</div>
+                    `;
+          } else {
+            displayFileContent('config.json', 'Eroare: Fișierul de configurare nu a fost găsit sau este inaccesibil');
+          }
+        } catch (error) {
+          displayFileContent('config.json', `Eroare la încărcarea configurației: ${error.message}`);
+        }
+      }
+      // Încarcă abonații
+      async function loadSubscribers() {
+        try {
+          const response = await fetch('subscriptions.json');
+          if (response.ok) {
+            const subscribers = await response.json();
+            displayFileContent('subscriptions.json', JSON.stringify(subscribers, null, 2));
+            // Actualizează lista abonaților
+            const subscribersContainer = document.getElementById('subscribersContainer');
+            subscribersContainer.innerHTML = '';
+            if (Object.keys(subscribers).length === 0) {
+              subscribersContainer.innerHTML = ' < div class = "no-data" > Nu s - au găsit abonați < /div>';
+            } else {
+              for (const [id, user] of Object.entries(subscribers)) {
+                const subscriberElement = document.createElement('div');
+                subscriberElement.className = 'subscriber-item';
+                subscriberElement.innerHTML = `
+
+					<div class="subscriber-info">
+						<div class="subscriber-name">${user.name || 'Necunoscut'}</div>
+						<div class="subscriber-details">
+                                        ID: ${id} | Abonat la: ${new Date(user.subscribed_at).toLocaleDateString()}
+                                    </div>
+					</div>
+					<div class="subscriber-actions">
+						<button class="btn btn-danger" data-id="${id}">Elimină</button>
+					</div>
+                            `;
+                subscribersContainer.appendChild(subscriberElement);
+              }
+            }
+            // Actualizează numărul total de abonați
+            document.getElementById('totalSubscribers').textContent = Object.keys(subscribers).length;
+          } else {
+            displayFileContent('subscriptions.json', 'Eroare: Fișierul de abonări nu a fost găsit sau este inaccesibil');
+            document.getElementById('subscribersContainer').innerHTML = ' < div class = "no-data" > Eroare la încărcarea abonaților < /div>';
+          }
+        } catch (error) {
+          displayFileContent('subscriptions.json', `Eroare la încărcarea abonaților: ${error.message}`);
+          document.getElementById('subscribersContainer').innerHTML = ' < div class = "no-data" > Eroare la încărcarea abonaților < /div>';
+        }
+      }
+      // Încarcă jurnalul botului
+      async function loadBotLog() {
+        try {
+          const response = await fetch('history/bot/radiosonde_notifier.log');
+          if (response.ok) {
+            const logContent = await response.text();
+            displayFileContent('bot.log', logContent);
+          } else {
+            displayFileContent('bot.log', 'Eroare: Fișierul jurnal nu a fost găsit sau este inaccesibil');
+          }
+        } catch (error) {
+          displayFileContent('bot.log', `Eroare la încărcarea jurnalului: ${error.message}`);
+        }
+      }
+      // Încarcă lista fișierelor sonde
+      async function loadSondeFilesList() {
+        try {
+          const response = await fetch('history/sondes/');
+          if (response.ok) {
+            const fileList = await response.json();
+            sondeFiles = fileList.filter(file => file.endsWith('.json'));
+            const sondeFilesList = document.getElementById('sondeFilesList');
+            sondeFilesList.innerHTML = '';
+            if (sondeFiles.length === 0) {
+              sondeFilesList.innerHTML = ' < div class = "no-data" > Nu s - au găsit fișiere sonde < /div>';
+            } else {
+              sondeFiles.forEach(file => {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+                li.dataset.file = file;
+                li.innerHTML = `
+					<i class="fas fa-file-alt"></i> ${file}`;
+                sondeFilesList.appendChild(li);
+              });
+            }
+            // Actualizează numărul total de fișiere jurnal
+            document.getElementById('totalLogFiles').textContent = sondeFiles.length;
+            // Dacă există fișiere, încarcă ultimul
+            if (sondeFiles.length > 0) {
+              loadSondeFileContent(sondeFiles[sondeFiles.length - 1]);
+              document.querySelectorAll('#sondeFilesList .file-item').forEach(item => {
+                if (item.dataset.file === sondeFiles[sondeFiles.length - 1]) {
+                  item.classList.add('active');
+                }
+              });
+            }
+          } else {
+            document.getElementById('sondeFilesList').innerHTML = ' < div class = "no-data" > Eroare la încărcarea listei de fișiere < /div>';
+          }
+        } catch (error) {
+          document.getElementById('sondeFilesList').innerHTML = ' < div class = "no-data" > Eroare la încărcarea listei de fișiere < /div>';
+          console.error('Eroare la încărcarea listei de fișiere:', error);
+        }
+      }
+      // Încarcă conținutul unui fișier sonde
+      async function loadSondeFileContent(fileName) {
+        try {
+          const response = await fetch(`history/sondes/${fileName}`);
+          if (response.ok) {
+            const sondeData = await response.json();
+            displayFileContent(fileName, JSON.stringify(sondeData, null, 2));
+            // Procesează datele sondei pentru afișare
+            processSondeData(sondeData, fileName);
+          } else {
+            displayFileContent(fileName, 'Eroare: Fișierul sondei nu a fost găsit sau este inaccesibil');
+          }
+        } catch (error) {
+          displayFileContent(fileName, `Eroare la încărcarea fișierului sondei: ${error.message}`);
+        }
+      }
+      // Procesează datele sondei pentru afișare pe hartă și grafice
+      function processSondeData(sondeData, fileName) {
+        // Actualizează numărul de sonde active
+        document.getElementById('activeSondes').textContent = sondeFiles.length;
+        // Extrage datele pentru grafice
+        const times = [];
+        const altitudes = [];
+        const speeds = [];
+        const velocities = [];
+        const directions = [];
+        // Extrage pozițiile pentru hartă
+        const positions = [];
+        // Procesează fiecare punct de date
+        sondeData.forEach((point, index) => {
+          const time = index; // Simplificare: indexul ca timp
+          times.push(time);
+          if (point.alt) altitudes.push({
+            x: time,
+            y: point.alt
+          });
+          if (point.speed) speeds.push({
+            x: time,
+            y: point.speed
+          });
+          if (point.vel_v) velocities.push({
+            x: time,
+            y: point.vel_v
+          });
+          if (point.dir) directions.push({
+            x: time,
+            y: point.dir
+          });
+          if (point.lat && point.lon) {
+            positions.push([point.lat, point.lon]);
+          }
+        });
+        // Actualizează graficele
+        updateChart(altitudeChart, times, altitudes, '#3a6df0');
+        updateChart(speedChart, times, speeds, '#4caf50');
+        updateChart(velocityChart, times, velocities, '#ff9800');
+        updateChart(directionChart, times, directions, '#f44336');
+        // Actualizează harta
+        updateMap(positions, fileName);
+      }
+      // Actualizează un grafic cu date noi
+      function updateChart(chart, times, data, color) {
+        chart.data = {
+          datasets: [{
+            label: 'Date Sonde',
+            data: data,
+            borderColor: color,
+            backgroundColor: color + '20',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.1,
+            fill: true
+          }]
+        };
+        chart.update();
+      }
+      // Actualizează harta cu noile poziții
+      function updateMap(positions, fileName) {
+        // Șterge toți markerii existenți
+        map.eachLayer(layer => {
+          if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+            map.removeLayer(layer);
+          }
+        });
+        // Adaugă o linie care leagă toate pozițiile
+        if (positions.length > 0) {
+          const polyline = L.polyline(positions, {
+            color: '#3a6df0',
+            weight: 3,
+            opacity: 0.7
+          }).addTo(map);
+          // Adaugă marker pentru prima poziție
+          if (positions.length > 0) {
+            L.marker(positions[0]).addTo(map).bindPopup(`Lansare: ${fileName}
+					<br>Lat: ${positions[0][0].toFixed(4)}, Lon: ${positions[0][1].toFixed(4)}`);
+          }
+          // Adaugă marker pentru ultima poziție
+          if (positions.length > 1) {
+            L.marker(positions[positions.length - 1]).addTo(map).bindPopup(`Ultima poziție: ${fileName}
+						<br>Lat: ${positions[positions.length - 1][0].toFixed(4)}, Lon: ${positions[positions.length - 1][1].toFixed(4)}`);
+          }
+          // Ajustează zoom-ul pentru a se potrivi cu traseul
+          map.fitBounds(polyline.getBounds(), {
+            padding: [50, 50]
+          });
+        }
+      }
+      // Încarcă conținutul unui fișier
+      async function loadFileContent(fileName) {
+        switch (fileName) {
+          case 'config.json':
+            await loadConfig();
+            break;
+          case 'subscriptions.json':
+            await loadSubscribers();
+            break;
+          case 'bot.log':
+            await loadBotLog();
+            break;
+          default:
+            displayFileContent(fileName, 'Selectează un fișier valid');
+        }
+      }
+      // Afișează conținutul unui fișier în panoul principal
+      function displayFileContent(fileName, content) {
+        const fileContentElement = document.getElementById('fileContent');
+        if (fileName.endsWith('.json')) {
+          // Formatează și colorează JSON-ul
+          try {
+            const jsonObj = JSON.parse(content);
+            content = JSON.stringify(jsonObj, null, 2);
+            fileContentElement.innerHTML = syntaxHighlightJSON(content);
+          } catch {
+            fileContentElement.textContent = content;
+          }
+        } else {
+          fileContentElement.textContent = content;
+        }
+        // Actualizează titlul panoului
+        document.querySelector('#fileViewer .panel-header h2').innerHTML = `
+							<i class="fas fa-file"></i> ${fileName}`;
+      }
+      // Evidențiere sintaxă JSON
+      function syntaxHighlightJSON(json) {
+        json = json.replace(/&/g, '&amp;').replace(/ < /g, '&lt;').replace(/ > /g, '&gt;');
+          return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(match) {
+            let cls = 'json-number';
+            if (/^"/.test(match)) {
+              if (/:$/.test(match)) {
+                cls = 'json-key';
+              } else {
+                cls = 'json-string';
+              }
+            } else if (/true|false/.test(match)) {
+              cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+              cls = 'json-null';
+            }
+            return ' < span class = "' + cls + '" > ' + match + ' < /span>';
+          });
+        }
+        // Actualizează statisticile
+        function updateStatistics() {
+          // Aceste valori sunt actualizate în funcțiile de încărcare corespunzătoare
+        }
+        // Pornește aplicația când se încarcă DOM-ul
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+  </body>
+</html>
