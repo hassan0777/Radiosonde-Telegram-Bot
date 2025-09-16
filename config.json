@@ -1,0 +1,20 @@
+{
+    "telegram": {
+        "bot_token": "YOUR_BOT_TOKEN_HERE",
+        "chat_id": "YOUR_CHAT_ID_HERE"
+    },
+    "monitoring": {
+        "target_latitude": 44.4268,
+        "target_longitude": 26.1025,
+        "radius_km": 20.0,
+        "check_interval_seconds": 60,
+        "min_altitude_m": 0,
+        "max_altitude_m": 30000
+    },
+    "notification_settings": {
+        "send_initial_detection": true,
+        "send_position_updates": true,
+        "send_landing_alert": true,
+        "update_interval_minutes": 5
+    }
+}
