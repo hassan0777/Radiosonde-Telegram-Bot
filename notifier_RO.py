@@ -29,6 +29,10 @@ class RadiosondeNotifier:
 
         # Initialize SondeHub client
         self.sondehub_stream = None
+        self.sondehub_connected = False
+        self.sondehub_reconnect_attempts = 0
+        self.max_reconnect_attempts = 10
+        self.reconnect_delay = 30  # seconds
 
         # Create history directory structure
         self.history_dir = "history"
@@ -133,8 +137,8 @@ class RadiosondeNotifier:
         dlon = lon2_rad - lon1_rad
 
         a = (
-            math.sin(dlat / 2) ** 2
-            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+                math.sin(dlat / 2) ** 2
+                + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
         )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
@@ -223,7 +227,7 @@ class RadiosondeNotifier:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload) as response:
+                async with session.post(url, json=payload, timeout=30) as response:
                     if response.status == 200:
                         logging.info(f"Mesaj Telegram trimis cu succes catre {chat_id}")
                     else:
@@ -235,6 +239,10 @@ class RadiosondeNotifier:
                         if "bot was blocked by the user" in error_text:
                             self.subscribed_users.pop(str(chat_id), None)
                             self.save_subscriptions()
+        except asyncio.TimeoutError:
+            logging.warning(f"Timeout la trimiterea mesajului Telegram catre {chat_id}")
+        except aiohttp.ClientError as e:
+            logging.warning(f"Eroare de retea la trimiterea mesajului Telegram: {e}")
         except Exception as e:
             logging.error(
                 f"Eroare la trimiterea mesajului Telegram catre {chat_id}: {e}"
@@ -365,7 +373,7 @@ class RadiosondeNotifier:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as response:
+                async with session.get(url, params=params, timeout=30) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data["ok"] and data["result"]:
@@ -373,6 +381,10 @@ class RadiosondeNotifier:
                                 self.last_update_id = update["update_id"]
                                 if "message" in update and "text" in update["message"]:
                                     await self.handle_command(update["message"])
+        except asyncio.TimeoutError:
+            logging.warning("Timeout la preluarea actualizarilor Telegram")
+        except aiohttp.ClientError as e:
+            logging.warning(f"Eroare de retea la preluarea actualizarilor Telegram: {e}")
         except Exception as e:
             logging.error(f"Eroare la preluarea actualizarilor Telegram: {e}")
 
@@ -383,8 +395,8 @@ class RadiosondeNotifier:
 
         # Check if user is authorized (either in config or subscribed)
         is_authorized = (
-            str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
-            or str(chat_id) in self.subscribed_users
+                str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
+                or str(chat_id) in self.subscribed_users
         )
 
         if text.startswith("/"):
@@ -410,7 +422,7 @@ class RadiosondeNotifier:
             elif command == "/help":
                 await self.cmd_help(chat_id)
             elif command == "/subscribers" and str(chat_id) == str(
-                self.telegram_config.get("admin_chat_id", "")
+                    self.telegram_config.get("admin_chat_id", "")
             ):
                 await self.cmd_subscribers(chat_id)
             else:
@@ -465,9 +477,12 @@ class RadiosondeNotifier:
         """Send current status of the monitor"""
         active_sondes = len(self.detected_sonde)
         subscribers = len(self.subscribed_users)
+        sondehub_status = "✅ Conectat" if self.sondehub_connected else "❌ Deconectat"
+
         message = f"📊 *Status Monitor Radiosonde*\n\n"
         message += f"• Sonde active urmarite: {active_sondes}\n"
         message += f"• Utilizatori abonati: {subscribers}\n"
+        message += f"• Status SondeHub: {sondehub_status}\n"
         message += f"• Centru monitorizare: {self.monitoring_config['target_latitude']}, {self.monitoring_config['target_longitude']}\n"
         message += f"• Raza monitorizare: {self.monitoring_config['radius_km']} km\n"
         message += f"• Interval altitudine: {self.monitoring_config['min_altitude_m']} - {self.monitoring_config['max_altitude_m']} m\n"
@@ -588,6 +603,56 @@ class RadiosondeNotifier:
 
         await self.send_telegram_message(message, chat_id)
 
+    def on_message(self, message):
+        """Callback for MQTT messages - accepts proper parameters for sondehub"""
+        try:
+            self.process_sonde_data(message)
+        except Exception as e:
+            logging.error(f"Eroare la procesarea mesajului MQTT: {e}")
+
+    def on_connect(self, client, userdata, flags, rc):
+        """Callback for MQTT connection - accepts proper parameters"""
+        self.sondehub_connected = True
+        self.sondehub_reconnect_attempts = 0
+        logging.info("Conectat cu succes la SondeHub")
+
+    def on_disconnect(self, client, userdata, rc):
+        """Callback for MQTT disconnection - accepts proper parameters"""
+        self.sondehub_connected = False
+        logging.warning("Deconectat de la SondeHub")
+
+    async def connect_to_sondehub(self):
+        """Connect to SondeHub with retry logic"""
+        try:
+            # Create a new Stream instance with the correct callback signatures
+            self.sondehub_stream = sondehub.Stream(
+                on_message=self.on_message,
+                on_connect=self.on_connect,
+                on_disconnect=self.on_disconnect
+            )
+            self.sondehub_connected = True
+            logging.info("Conectat la SondeHub. Se monitorizeaza radiosondele...")
+            return True
+        except Exception as e:
+            logging.error(f"Eroare la conectarea la SondeHub: {e}")
+            self.sondehub_connected = False
+            return False
+
+    async def reconnect_sondehub(self):
+        """Reconnect to SondeHub with exponential backoff"""
+        if self.sondehub_reconnect_attempts >= self.max_reconnect_attempts:
+            logging.error("Numar maxim de incercari de reconectare la SondeHub atins")
+            return False
+
+        delay = self.reconnect_delay * (2 ** self.sondehub_reconnect_attempts)
+        self.sondehub_reconnect_attempts += 1
+
+        logging.warning(
+            f"Reincercare conectare la SondeHub in {delay} secunde (incercarea {self.sondehub_reconnect_attempts}/{self.max_reconnect_attempts})")
+
+        await asyncio.sleep(delay)
+        return await self.connect_to_sondehub()
+
     async def run(self):
         """Main execution loop"""
         logging.info("Pornire Monitor Radiosonde...")
@@ -597,13 +662,10 @@ class RadiosondeNotifier:
         logging.info(f"Raza: {self.monitoring_config['radius_km']} km")
         logging.info(f"Utilizatori abonati: {len(self.subscribed_users)}")
 
-        # Create a callback function for SondeHub messages
-        def on_message(message):
-            self.process_sonde_data(message)
-
-        # Start the SondeHub client
-        self.sondehub_stream = sondehub.Stream(on_message=on_message)
-        logging.info("Conectat la SondeHub. Se monitorizeaza radiosondele...")
+        # Connect to SondeHub
+        sondehub_connected = await self.connect_to_sondehub()
+        if not sondehub_connected:
+            logging.warning("Nu s-a putut conecta initial la SondeHub")
 
         try:
             # Send startup message to admin
@@ -612,13 +674,18 @@ class RadiosondeNotifier:
                 startup_msg = "✅ Monitorul de Radiosonde a pornit cu succes!\n"
                 startup_msg += f"Zona de monitorizare: {self.monitoring_config['target_latitude']}, {self.monitoring_config['target_longitude']}\n"
                 startup_msg += f"Raza: {self.monitoring_config['radius_km']} km\n"
-                startup_msg += f"Utilizatori abonati: {len(self.subscribed_users)}"
+                startup_msg += f"Utilizatori abonati: {len(self.subscribed_users)}\n"
+                startup_msg += f"Status SondeHub: {'✅ Conectat' if sondehub_connected else '❌ Deconectat'}"
                 await self.send_telegram_message(startup_msg, admin_chat_id)
 
             # Main loop with both SondeHub monitoring and Telegram command handling
             while True:
                 # Check for Telegram commands
                 await self.get_telegram_updates()
+
+                # Check SondeHub connection status and reconnect if needed
+                if not self.sondehub_connected:
+                    await self.reconnect_sondehub()
 
                 # Sleep for a bit before checking again
                 await asyncio.sleep(5)
@@ -629,7 +696,7 @@ class RadiosondeNotifier:
             logging.error(f"Eroare in bucla principala: {e}")
         finally:
             if self.sondehub_stream:
-                self.sondehub_stream.close()
+                self.sondehub_stream.disconnect()
 
 
 async def main():
