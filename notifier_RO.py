@@ -4,6 +4,7 @@ import time
 import math
 import asyncio
 import os
+import threading
 from datetime import datetime, timedelta
 import aiohttp
 import sondehub
@@ -51,6 +52,10 @@ class RadiosondeNotifier:
         # Load user subscriptions
         self.subscriptions_file = "subscriptions.json"
         self.subscribed_users = self.load_subscriptions()
+
+        # Create a queue for sonde data processing
+        self.sonde_queue = asyncio.Queue()
+        self.processing_task = None
 
     def setup_logging(self):
         """Set up file logging to the bot directory with proper encoding"""
@@ -137,8 +142,8 @@ class RadiosondeNotifier:
         dlon = lon2_rad - lon1_rad
 
         a = (
-                math.sin(dlat / 2) ** 2
-                + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
         )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
@@ -187,7 +192,7 @@ class RadiosondeNotifier:
         message = f"{emoji} *Alerta Radiosonda* {emoji}\n\n"
         message += f"*Eveniment:* {'Detectare' if event_type == 'initial' else 'Actualizare' if event_type == 'update' else 'Aterizare'}\n"
         message += f"*Serial:* `{serial}`\n"
-        message += f"*Distanta:* {distance_km:.1f} km de tinta\n"
+        message += f"*Distanta:* {distance_km:.1f} km de centrul ariei\n"
         message += f"*Pozitie:* {lat:.4f}°, {lon:.4f}°\n"
         message += f"*Altitudine:* {alt:.0f} m\n"
         message += f"*Viteza orizontala:* {velocity_h:.1f} m/s\n"
@@ -270,7 +275,6 @@ class RadiosondeNotifier:
             with open(filepath, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
-            logging.info(f"Date salvate pentru sonda {serial} in {filepath}")
         except Exception as e:
             logging.error(f"Eroare la salvarea datelor sondei: {e}")
 
@@ -294,11 +298,29 @@ class RadiosondeNotifier:
 
         return False
 
-    def process_sonde_data(self, sonde_data):
+    def on_message(self, message):
+        """Callback for MQTT messages - accepts proper parameters for sondehub"""
+        try:
+            # Put the data in the queue for async processing
+            asyncio.run_coroutine_threadsafe(self.sonde_queue.put(message), self.loop)
+        except Exception as e:
+            logging.error(f"Eroare la adaugarea datelor in coada: {e}")
+
+    async def process_sonde_data(self, sonde_data):
         """Process incoming radiosonde data"""
         try:
             serial = sonde_data.get("serial")
             if not serial:
+                return
+
+            # Skip invalid data with encoding issues
+            if (
+                "rs41_subframe" in sonde_data
+                and len(sonde_data["rs41_subframe"]) > 1000
+            ):
+                logging.debug(
+                    f"Skipping sonde data with large rs41_subframe for {serial}"
+                )
                 return
 
             lat = sonde_data.get("lat")
@@ -335,7 +357,7 @@ class RadiosondeNotifier:
                         sonde_data, distance, event_type
                     )
                     # Send to all subscribed users
-                    asyncio.create_task(self.send_telegram_message(message))
+                    await self.send_telegram_message(message)
 
                     # Update last notification time
                     self.last_notification_time[serial] = time.time()
@@ -350,6 +372,18 @@ class RadiosondeNotifier:
 
         except Exception as e:
             logging.error(f"Eroare la procesarea datelor sondei: {e}")
+
+    async def sonde_processor(self):
+        """Process sonde data from the queue"""
+        while True:
+            try:
+                sonde_data = await self.sonde_queue.get()
+                await self.process_sonde_data(sonde_data)
+                self.sonde_queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(f"Eroare in procesorul de date sonde: {e}")
 
     def cleanup_old_entries(self):
         """Remove old entries from tracking dictionaries"""
@@ -384,7 +418,9 @@ class RadiosondeNotifier:
         except asyncio.TimeoutError:
             logging.warning("Timeout la preluarea actualizarilor Telegram")
         except aiohttp.ClientError as e:
-            logging.warning(f"Eroare de retea la preluarea actualizarilor Telegram: {e}")
+            logging.warning(
+                f"Eroare de retea la preluarea actualizarilor Telegram: {e}"
+            )
         except Exception as e:
             logging.error(f"Eroare la preluarea actualizarilor Telegram: {e}")
 
@@ -395,8 +431,8 @@ class RadiosondeNotifier:
 
         # Check if user is authorized (either in config or subscribed)
         is_authorized = (
-                str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
-                or str(chat_id) in self.subscribed_users
+            str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
+            or str(chat_id) in self.subscribed_users
         )
 
         if text.startswith("/"):
@@ -422,7 +458,7 @@ class RadiosondeNotifier:
             elif command == "/help":
                 await self.cmd_help(chat_id)
             elif command == "/subscribers" and str(chat_id) == str(
-                    self.telegram_config.get("admin_chat_id", "")
+                self.telegram_config.get("admin_chat_id", "")
             ):
                 await self.cmd_subscribers(chat_id)
             else:
@@ -529,7 +565,7 @@ class RadiosondeNotifier:
 
         if not os.path.exists(filepath):
             await self.send_telegram_message(
-                f"Nu s-a gasit istoric pentru sonda `{serial}`", chat_id
+                f"Nu s-a gasistoric pentru sonda `{serial}`", chat_id
             )
             return
 
@@ -548,11 +584,14 @@ class RadiosondeNotifier:
             last_event = None
 
             for line in lines:
-                data = json.loads(line.strip())
-                event_type = data.get("event_type", "necunoscut")
-                if event_type in events:
-                    events[event_type] += 1
-                last_event = data
+                try:
+                    data = json.loads(line.strip())
+                    event_type = data.get("event_type", "necunoscut")
+                    if event_type in events:
+                        events[event_type] += 1
+                    last_event = data
+                except json.JSONDecodeError:
+                    continue  # Skip invalid JSON lines
 
             message = f"📜 *Istoric pentru Sonda* `{serial}`\n\n"
             message += f"• Total inregistrari: {len(lines)}\n"
@@ -603,13 +642,6 @@ class RadiosondeNotifier:
 
         await self.send_telegram_message(message, chat_id)
 
-    def on_message(self, message):
-        """Callback for MQTT messages - accepts proper parameters for sondehub"""
-        try:
-            self.process_sonde_data(message)
-        except Exception as e:
-            logging.error(f"Eroare la procesarea mesajului MQTT: {e}")
-
     def on_connect(self, client, userdata, flags, rc):
         """Callback for MQTT connection - accepts proper parameters"""
         self.sondehub_connected = True
@@ -628,7 +660,7 @@ class RadiosondeNotifier:
             self.sondehub_stream = sondehub.Stream(
                 on_message=self.on_message,
                 on_connect=self.on_connect,
-                on_disconnect=self.on_disconnect
+                on_disconnect=self.on_disconnect,
             )
             self.sondehub_connected = True
             logging.info("Conectat la SondeHub. Se monitorizeaza radiosondele...")
@@ -644,11 +676,12 @@ class RadiosondeNotifier:
             logging.error("Numar maxim de incercari de reconectare la SondeHub atins")
             return False
 
-        delay = self.reconnect_delay * (2 ** self.sondehub_reconnect_attempts)
+        delay = self.reconnect_delay * (2**self.sondehub_reconnect_attempts)
         self.sondehub_reconnect_attempts += 1
 
         logging.warning(
-            f"Reincercare conectare la SondeHub in {delay} secunde (incercarea {self.sondehub_reconnect_attempts}/{self.max_reconnect_attempts})")
+            f"Reincercare conectare la SondeHub in {delay} secunde (incercarea {self.sondehub_reconnect_attempts}/{self.max_reconnect_attempts})"
+        )
 
         await asyncio.sleep(delay)
         return await self.connect_to_sondehub()
@@ -661,6 +694,12 @@ class RadiosondeNotifier:
         )
         logging.info(f"Raza: {self.monitoring_config['radius_km']} km")
         logging.info(f"Utilizatori abonati: {len(self.subscribed_users)}")
+
+        # Store the event loop reference
+        self.loop = asyncio.get_event_loop()
+
+        # Start the sonde processor task
+        self.processing_task = asyncio.create_task(self.sonde_processor())
 
         # Connect to SondeHub
         sondehub_connected = await self.connect_to_sondehub()
@@ -695,6 +734,14 @@ class RadiosondeNotifier:
         except Exception as e:
             logging.error(f"Eroare in bucla principala: {e}")
         finally:
+            # Cancel the processing task
+            if self.processing_task:
+                self.processing_task.cancel()
+                try:
+                    await self.processing_task
+                except asyncio.CancelledError:
+                    pass
+
             if self.sondehub_stream:
                 self.sondehub_stream.disconnect()
 

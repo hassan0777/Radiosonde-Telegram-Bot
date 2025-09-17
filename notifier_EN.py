@@ -4,12 +4,12 @@ import time
 import math
 import asyncio
 import os
+import threading
 from datetime import datetime, timedelta
 import aiohttp
 import sondehub
 
-# Configure logging
-# We'll create the log directory in the __init__ method
+# Configure logging with proper encoding
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -53,38 +53,68 @@ class RadiosondeNotifier:
         self.subscriptions_file = "subscriptions.json"
         self.subscribed_users = self.load_subscriptions()
 
+        # Create a queue for sonde data processing
+        self.sonde_queue = asyncio.Queue()
+        self.processing_task = None
+
     def setup_logging(self):
-        """Set up file logging to the bot directory"""
+        """Set up file logging to the bot directory with proper encoding"""
         # Remove any existing file handlers
         for handler in logging.root.handlers[:]:
             if isinstance(handler, logging.FileHandler):
                 logging.root.removeHandler(handler)
 
-        # Add file handler to bot directory
+        # Add file handler to bot directory with UTF-8 encoding
         log_file = os.path.join(self.bot_dir, "radiosonde_notifier.log")
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         )
         logging.root.addHandler(file_handler)
 
+        # Also update the stream handler to handle Unicode properly
+        for handler in logging.root.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                # Replace with a StreamHandler that uses UTF-8
+                logging.root.removeHandler(handler)
+                break
+
+        # Create a stream handler that can handle Unicode
+        class UnicodeStreamHandler(logging.StreamHandler):
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    # Encode to UTF-8 and then decode with replace to handle any encoding issues
+                    msg = msg.encode("utf-8", "replace").decode("utf-8", "replace")
+                    stream = self.stream
+                    stream.write(msg + self.terminator)
+                    self.flush()
+                except Exception:
+                    self.handleError(record)
+
+        stream_handler = UnicodeStreamHandler()
+        stream_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        )
+        logging.root.addHandler(stream_handler)
+
     def load_config(self, config_file):
         """Load configuration from JSON file"""
         try:
-            with open(config_file, "r") as f:
+            with open(config_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
-            logging.error(f"Config file {config_file} not found!")
+            logging.error(f"Configuration file {config_file} not found!")
             raise
         except json.JSONDecodeError:
-            logging.error(f"Invalid JSON in config file {config_file}!")
+            logging.error(f"Invalid JSON in configuration file {config_file}!")
             raise
 
     def load_subscriptions(self):
         """Load user subscriptions from file"""
         try:
             if os.path.exists(self.subscriptions_file):
-                with open(self.subscriptions_file, "r") as f:
+                with open(self.subscriptions_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             return {}
         except Exception as e:
@@ -94,8 +124,8 @@ class RadiosondeNotifier:
     def save_subscriptions(self):
         """Save user subscriptions to file"""
         try:
-            with open(self.subscriptions_file, "w") as f:
-                json.dump(self.subscribed_users, f, indent=2)
+            with open(self.subscriptions_file, "w", encoding="utf-8") as f:
+                json.dump(self.subscribed_users, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logging.error(f"Error saving subscriptions: {e}")
 
@@ -112,8 +142,8 @@ class RadiosondeNotifier:
         dlon = lon2_rad - lon1_rad
 
         a = (
-                math.sin(dlat / 2) ** 2
-                + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
         )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
@@ -162,13 +192,13 @@ class RadiosondeNotifier:
         message = f"{emoji} *Radiosonde Alert* {emoji}\n\n"
         message += f"*Event:* {'Detection' if event_type == 'initial' else 'Update' if event_type == 'update' else 'Landing'}\n"
         message += f"*Serial:* `{serial}`\n"
-        message += f"*Distance:* {distance_km:.1f} km from target\n"
+        message += f"*Distance:* {distance_km:.1f} km from center\n"
         message += f"*Position:* {lat:.4f}°, {lon:.4f}°\n"
         message += f"*Altitude:* {alt:.0f} m\n"
-        message += f"*Horizontal Speed:* {velocity_h:.1f} m/s\n"
-        message += f"*Vertical Speed:* {velocity_v:.1f} m/s\n"
+        message += f"*Horizontal speed:* {velocity_h:.1f} m/s\n"
+        message += f"*Vertical speed:* {velocity_v:.1f} m/s\n"
         message += f"*Frequency:* {frequency}\n"
-        message += f"*Last Update:* {time_str}\n\n"
+        message += f"*Last update:* {time_str}\n\n"
 
         # Add Google Maps link
         maps_link = f"https://maps.google.com/?q={lat},{lon}"
@@ -208,7 +238,7 @@ class RadiosondeNotifier:
                     else:
                         error_text = await response.text()
                         logging.error(
-                            f"Failed to send Telegram message to {chat_id}: {error_text}"
+                            f"Could not send Telegram message to {chat_id}: {error_text}"
                         )
                         # If user blocked the bot, remove them from subscriptions
                         if "bot was blocked by the user" in error_text:
@@ -240,10 +270,9 @@ class RadiosondeNotifier:
             }
 
             # Append to the file
-            with open(filepath, "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
-            logging.info(f"Saved data for sonde {serial} to {filepath}")
         except Exception as e:
             logging.error(f"Error saving sonde data: {e}")
 
@@ -267,11 +296,29 @@ class RadiosondeNotifier:
 
         return False
 
-    def process_sonde_data(self, sonde_data):
+    def on_message(self, message):
+        """Callback for MQTT messages - accepts proper parameters for sondehub"""
+        try:
+            # Put the data in the queue for async processing
+            asyncio.run_coroutine_threadsafe(self.sonde_queue.put(message), self.loop)
+        except Exception as e:
+            logging.error(f"Error adding data to queue: {e}")
+
+    async def process_sonde_data(self, sonde_data):
         """Process incoming radiosonde data"""
         try:
             serial = sonde_data.get("serial")
             if not serial:
+                return
+
+            # Skip invalid data with encoding issues
+            if (
+                "rs41_subframe" in sonde_data
+                and len(sonde_data["rs41_subframe"]) > 1000
+            ):
+                logging.debug(
+                    f"Skipping sonde data with large rs41_subframe for {serial}"
+                )
                 return
 
             lat = sonde_data.get("lat")
@@ -308,7 +355,7 @@ class RadiosondeNotifier:
                         sonde_data, distance, event_type
                     )
                     # Send to all subscribed users
-                    asyncio.create_task(self.send_telegram_message(message))
+                    await self.send_telegram_message(message)
 
                     # Update last notification time
                     self.last_notification_time[serial] = time.time()
@@ -323,6 +370,18 @@ class RadiosondeNotifier:
 
         except Exception as e:
             logging.error(f"Error processing sonde data: {e}")
+
+    async def sonde_processor(self):
+        """Process sonde data from the queue"""
+        while True:
+            try:
+                sonde_data = await self.sonde_queue.get()
+                await self.process_sonde_data(sonde_data)
+                self.sonde_queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(f"Error in sonde data processor: {e}")
 
     def cleanup_old_entries(self):
         """Remove old entries from tracking dictionaries"""
@@ -368,8 +427,8 @@ class RadiosondeNotifier:
 
         # Check if user is authorized (either in config or subscribed)
         is_authorized = (
-                str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
-                or str(chat_id) in self.subscribed_users
+            str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
+            or str(chat_id) in self.subscribed_users
         )
 
         if text.startswith("/"):
@@ -395,12 +454,13 @@ class RadiosondeNotifier:
             elif command == "/help":
                 await self.cmd_help(chat_id)
             elif command == "/subscribers" and str(chat_id) == str(
-                    self.telegram_config.get("admin_chat_id", "")
+                self.telegram_config.get("admin_chat_id", "")
             ):
                 await self.cmd_subscribers(chat_id)
             else:
                 await self.send_telegram_message(
-                    "❌ Unknown command. Use /help for available commands.", chat_id
+                    "❌ Unknown command. Use /help for available commands.",
+                    chat_id,
                 )
 
     async def cmd_start(self, chat_id, first_name):
@@ -452,7 +512,7 @@ class RadiosondeNotifier:
         sondehub_status = "✅ Connected" if self.sondehub_connected else "❌ Disconnected"
 
         message = f"📊 *Radiosonde Monitor Status*\n\n"
-        message += f"• Active sondes being tracked: {active_sondes}\n"
+        message += f"• Active tracked sondes: {active_sondes}\n"
         message += f"• Subscribed users: {subscribers}\n"
         message += f"• SondeHub Status: {sondehub_status}\n"
         message += f"• Monitoring center: {self.monitoring_config['target_latitude']}, {self.monitoring_config['target_longitude']}\n"
@@ -465,7 +525,7 @@ class RadiosondeNotifier:
         """List all currently tracked sondes"""
         if not self.detected_sonde:
             await self.send_telegram_message(
-                "No active sondes being tracked currently.", chat_id
+                "Currently no active sondes being tracked.", chat_id
             )
             return
 
@@ -478,7 +538,7 @@ class RadiosondeNotifier:
             message += f"• `{serial}`\n"
             message += f"  Position: {lat:.4f}, {lon:.4f}\n"
             message += f"  Altitude: {alt:.0f} m\n"
-            message += f"  Tracking for: {age:.1f} minutes\n\n"
+            message += f"  Tracked for: {age:.1f} minutes\n\n"
 
         await self.send_telegram_message(message, chat_id)
 
@@ -487,7 +547,8 @@ class RadiosondeNotifier:
         parts = text.split()
         if len(parts) < 2:
             await self.send_telegram_message(
-                "Please specify a sonde serial. Usage: /history <serial>", chat_id
+                "Please specify a sonde serial. Usage: /history <serial>",
+                chat_id,
             )
             return
 
@@ -505,12 +566,12 @@ class RadiosondeNotifier:
             return
 
         try:
-            with open(filepath, "r") as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
             if not lines:
                 await self.send_telegram_message(
-                    f"No history data for sonde `{serial}`", chat_id
+                    f"No historical data for sonde `{serial}`", chat_id
                 )
                 return
 
@@ -519,11 +580,14 @@ class RadiosondeNotifier:
             last_event = None
 
             for line in lines:
-                data = json.loads(line.strip())
-                event_type = data.get("event_type", "unknown")
-                if event_type in events:
-                    events[event_type] += 1
-                last_event = data
+                try:
+                    data = json.loads(line.strip())
+                    event_type = data.get("event_type", "unknown")
+                    if event_type in events:
+                        events[event_type] += 1
+                    last_event = data
+                except json.JSONDecodeError:
+                    continue  # Skip invalid JSON lines
 
             message = f"📜 *History for Sonde* `{serial}`\n\n"
             message += f"• Total records: {len(lines)}\n"
@@ -548,7 +612,7 @@ class RadiosondeNotifier:
 
     async def cmd_help(self, chat_id):
         """Show help message with available commands"""
-        message = "🤖 *Radiosonde Notifier Bot Help*\n\n"
+        message = "🤖 *Radiosonde Notification Bot Help*\n\n"
         message += "Available commands:\n"
         message += "• /start - Subscribe to radiosonde notifications\n"
         message += "• /stop - Unsubscribe from notifications\n"
@@ -556,9 +620,7 @@ class RadiosondeNotifier:
         message += "• /list - List all currently tracked sondes\n"
         message += "• /history <serial> - Show history for a specific sonde\n"
         message += "• /help - Show this help message\n\n"
-        message += (
-            "The bot automatically alerts when radiosondes enter the monitoring area."
-        )
+        message += "The bot will automatically alert you when radiosondes enter the monitoring area."
 
         await self.send_telegram_message(message, chat_id)
 
@@ -573,17 +635,10 @@ class RadiosondeNotifier:
             subscribed_at = datetime.fromisoformat(user_data["subscribed_at"])
             message += f"• {user_data['name']} (ID: {user_id})\n"
             message += (
-                f"  Subscribed: {subscribed_at.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                f"  Subscribed at: {subscribed_at.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             )
 
         await self.send_telegram_message(message, chat_id)
-
-    def on_message(self, message):
-        """Callback for MQTT messages - accepts proper parameters for sondehub"""
-        try:
-            self.process_sonde_data(message)
-        except Exception as e:
-            logging.error(f"Error processing MQTT message: {e}")
 
     def on_connect(self, client, userdata, flags, rc):
         """Callback for MQTT connection - accepts proper parameters"""
@@ -603,10 +658,10 @@ class RadiosondeNotifier:
             self.sondehub_stream = sondehub.Stream(
                 on_message=self.on_message,
                 on_connect=self.on_connect,
-                on_disconnect=self.on_disconnect
+                on_disconnect=self.on_disconnect,
             )
             self.sondehub_connected = True
-            logging.info("Connected to SondeHub. Monitoring for radiosondes...")
+            logging.info("Connected to SondeHub. Monitoring radiosondes...")
             return True
         except Exception as e:
             logging.error(f"Error connecting to SondeHub: {e}")
@@ -619,23 +674,30 @@ class RadiosondeNotifier:
             logging.error("Maximum SondeHub reconnection attempts reached")
             return False
 
-        delay = self.reconnect_delay * (2 ** self.sondehub_reconnect_attempts)
+        delay = self.reconnect_delay * (2**self.sondehub_reconnect_attempts)
         self.sondehub_reconnect_attempts += 1
 
         logging.warning(
-            f"Retrying SondeHub connection in {delay} seconds (attempt {self.sondehub_reconnect_attempts}/{self.max_reconnect_attempts})")
+            f"Reconnecting to SondeHub in {delay} seconds (attempt {self.sondehub_reconnect_attempts}/{self.max_reconnect_attempts})"
+        )
 
         await asyncio.sleep(delay)
         return await self.connect_to_sondehub()
 
     async def run(self):
         """Main execution loop"""
-        logging.info("Starting Radiosonde Notifier...")
+        logging.info("Starting Radiosonde Monitor...")
         logging.info(
             f"Monitoring area: {self.monitoring_config['target_latitude']}, {self.monitoring_config['target_longitude']}"
         )
         logging.info(f"Radius: {self.monitoring_config['radius_km']} km")
         logging.info(f"Subscribed users: {len(self.subscribed_users)}")
+
+        # Store the event loop reference
+        self.loop = asyncio.get_event_loop()
+
+        # Start the sonde processor task
+        self.processing_task = asyncio.create_task(self.sonde_processor())
 
         # Connect to SondeHub
         sondehub_connected = await self.connect_to_sondehub()
@@ -646,7 +708,7 @@ class RadiosondeNotifier:
             # Send startup message to admin
             admin_chat_id = self.telegram_config.get("admin_chat_id")
             if admin_chat_id:
-                startup_msg = "✅ Radiosonde Notifier started successfully!\n"
+                startup_msg = "✅ Radiosonde Monitor started successfully!\n"
                 startup_msg += f"Monitoring area: {self.monitoring_config['target_latitude']}, {self.monitoring_config['target_longitude']}\n"
                 startup_msg += f"Radius: {self.monitoring_config['radius_km']} km\n"
                 startup_msg += f"Subscribed users: {len(self.subscribed_users)}\n"
@@ -670,6 +732,14 @@ class RadiosondeNotifier:
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
         finally:
+            # Cancel the processing task
+            if self.processing_task:
+                self.processing_task.cancel()
+                try:
+                    await self.processing_task
+                except asyncio.CancelledError:
+                    pass
+
             if self.sondehub_stream:
                 self.sondehub_stream.disconnect()
 
@@ -680,7 +750,7 @@ async def main():
         notifier = RadiosondeNotifier()
         await notifier.run()
     except Exception as e:
-        logging.error(f"Failed to start notifier: {e}")
+        logging.error(f"Could not start monitor: {e}")
 
 
 if __name__ == "__main__":
