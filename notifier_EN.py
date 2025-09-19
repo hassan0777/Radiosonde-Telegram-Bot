@@ -142,8 +142,8 @@ class RadiosondeNotifier:
         dlon = lon2_rad - lon1_rad
 
         a = (
-            math.sin(dlat / 2) ** 2
-            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+                math.sin(dlat / 2) ** 2
+                + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
         )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
@@ -166,6 +166,19 @@ class RadiosondeNotifier:
         if altitude is None:
             return False
         return min_alt <= altitude <= max_alt
+
+    def is_descending(self, serial, current_altitude):
+        """Check if the radiosonde is descending"""
+        if serial not in self.detected_sonde:
+            # First detection, can't determine descent yet
+            return False
+
+        previous_altitude = self.detected_sonde[serial].get("last_altitude")
+        if previous_altitude is None:
+            return False
+
+        # Consider descending if altitude decreased by at least 100 meters
+        return current_altitude < previous_altitude - 100
 
     def format_telegram_message(self, sonde_data, distance_km, event_type):
         """Format detailed Telegram message"""
@@ -199,6 +212,14 @@ class RadiosondeNotifier:
         message += f"*Vertical speed:* {velocity_v:.1f} m/s\n"
         message += f"*Frequency:* {frequency}\n"
         message += f"*Last update:* {time_str}\n\n"
+
+        # Add status information
+        if event_type == "initial":
+            message += "📉 *Sonde is descending!*\n\n"
+        elif event_type == "update":
+            message += "📉 *Sonde continues to descend!*\n\n"
+        elif event_type == "landing":
+            message += "🪂 *Sonde has landed!*\n\n"
 
         # Add Google Maps link
         maps_link = f"https://maps.google.com/?q={lat},{lon}"
@@ -313,8 +334,8 @@ class RadiosondeNotifier:
 
             # Skip invalid data with encoding issues
             if (
-                "rs41_subframe" in sonde_data
-                and len(sonde_data["rs41_subframe"]) > 1000
+                    "rs41_subframe" in sonde_data
+                    and len(sonde_data["rs41_subframe"]) > 1000
             ):
                 logging.debug(
                     f"Skipping sonde data with large rs41_subframe for {serial}"
@@ -325,7 +346,7 @@ class RadiosondeNotifier:
             lon = sonde_data.get("lon")
             alt = sonde_data.get("alt")
 
-            if lat is None or lon is None:
+            if lat is None or lon is None or alt is None:
                 return
 
             # Check if within radius and altitude
@@ -333,37 +354,52 @@ class RadiosondeNotifier:
             within_altitude = self.is_within_altitude(alt)
 
             if within_radius and within_altitude:
+                # Check if the sonde is descending
+                is_descending = self.is_descending(serial, alt)
+
                 # Determine event type
                 if serial not in self.detected_sonde:
+                    # First detection in target area
                     event_type = "initial"
                     self.detected_sonde[serial] = {
                         "first_detected": time.time(),
                         "last_position": (lat, lon),
                         "last_altitude": alt,
+                        "is_descending": False
                     }
                 elif alt < 100:  # Considered landing
                     event_type = "landing"
-                else:
+                elif is_descending:
                     event_type = "update"
-
-                # Save the data to history
-                self.save_sonde_data(sonde_data, event_type)
-
-                # Check if we should send notification
-                if self.should_send_notification(serial, event_type):
-                    message = self.format_telegram_message(
-                        sonde_data, distance, event_type
-                    )
-                    # Send to all subscribed users
-                    await self.send_telegram_message(message)
-
-                    # Update last notification time
-                    self.last_notification_time[serial] = time.time()
-
-                    # Update tracking data
-                    if event_type == "update":
+                else:
+                    # Sonde is in area but not descending, don't send notification
+                    # Still update tracking data but don't create event
+                    if serial in self.detected_sonde:
                         self.detected_sonde[serial]["last_position"] = (lat, lon)
                         self.detected_sonde[serial]["last_altitude"] = alt
+                    return
+
+                # Only send notifications for descending or landing sondes
+                if event_type in ["initial", "update", "landing"]:
+                    # Save the data to history
+                    self.save_sonde_data(sonde_data, event_type)
+
+                    # Check if we should send notification
+                    if self.should_send_notification(serial, event_type):
+                        message = self.format_telegram_message(
+                            sonde_data, distance, event_type
+                        )
+                        # Send to all subscribed users
+                        await self.send_telegram_message(message)
+
+                        # Update last notification time
+                        self.last_notification_time[serial] = time.time()
+
+                # Update tracking data
+                if serial in self.detected_sonde:
+                    self.detected_sonde[serial]["last_position"] = (lat, lon)
+                    self.detected_sonde[serial]["last_altitude"] = alt
+                    self.detected_sonde[serial]["is_descending"] = is_descending
 
             # Clean up old entries (sondes that left the area)
             self.cleanup_old_entries()
@@ -427,8 +463,8 @@ class RadiosondeNotifier:
 
         # Check if user is authorized (either in config or subscribed)
         is_authorized = (
-            str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
-            or str(chat_id) in self.subscribed_users
+                str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
+                or str(chat_id) in self.subscribed_users
         )
 
         if text.startswith("/"):
@@ -454,7 +490,7 @@ class RadiosondeNotifier:
             elif command == "/help":
                 await self.cmd_help(chat_id)
             elif command == "/subscribers" and str(chat_id) == str(
-                self.telegram_config.get("admin_chat_id", "")
+                    self.telegram_config.get("admin_chat_id", "")
             ):
                 await self.cmd_subscribers(chat_id)
             else:
@@ -476,12 +512,10 @@ class RadiosondeNotifier:
 
         message = f"👋 Welcome, {first_name}!\n\n"
         message += "✅ You are now subscribed to radiosonde notifications.\n\n"
-        message += (
-            "You will receive alerts when radiosondes enter the monitoring area:\n"
-        )
+        message += "You will receive alerts when radiosondes enter the monitoring area AND are descending:\n"
         message += f"• Center: {self.monitoring_config['target_latitude']}, {self.monitoring_config['target_longitude']}\n"
         message += f"• Radius: {self.monitoring_config['radius_km']} km\n"
-        message += f"• Altitude: {self.monitoring_config['min_altitude_m']} - {self.monitoring_config['max_altitude_m']} m\n\n"
+        message += f"• Altitude: {self.monitoring_config['min_altitude_m']} - {self.monitoring_config['max_altitude_m']} m\n"
         message += "Use /help to see all available commands.\n"
         message += "Use /stop to unsubscribe from notifications."
 
@@ -534,10 +568,12 @@ class RadiosondeNotifier:
             lat, lon = data["last_position"]
             alt = data["last_altitude"]
             age = (time.time() - data["first_detected"]) / 60  # minutes
+            descending = data.get("is_descending", False)
 
             message += f"• `{serial}`\n"
             message += f"  Position: {lat:.4f}, {lon:.4f}\n"
             message += f"  Altitude: {alt:.0f} m\n"
+            message += f"  Status: {'📉 Descending' if descending else '➡️ Stable'}\n"
             message += f"  Tracked for: {age:.1f} minutes\n\n"
 
         await self.send_telegram_message(message, chat_id)
@@ -620,7 +656,7 @@ class RadiosondeNotifier:
         message += "• /list - List all currently tracked sondes\n"
         message += "• /history <serial> - Show history for a specific sonde\n"
         message += "• /help - Show this help message\n\n"
-        message += "The bot will automatically alert you when radiosondes enter the monitoring area."
+        message += "⚠️ *Note:* The bot will alert only when radiosondes are descending and within the monitoring area."
 
         await self.send_telegram_message(message, chat_id)
 
@@ -674,7 +710,7 @@ class RadiosondeNotifier:
             logging.error("Maximum SondeHub reconnection attempts reached")
             return False
 
-        delay = self.reconnect_delay * (2**self.sondehub_reconnect_attempts)
+        delay = self.reconnect_delay * (2 ** self.sondehub_reconnect_attempts)
         self.sondehub_reconnect_attempts += 1
 
         logging.warning(
