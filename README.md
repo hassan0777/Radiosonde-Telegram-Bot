@@ -1,6 +1,6 @@
 <div align="center">
 
-# Radiosonde Notifier
+# Radiosonde Telegram Bot
 
 A Telegram bot that monitors and tracks radiosondes (weather balloons) in real-time using data from SondeHub. The bot sends alerts when radiosondes enter a specified monitoring area and provides detailed information about their position, altitude, and movement.
 
