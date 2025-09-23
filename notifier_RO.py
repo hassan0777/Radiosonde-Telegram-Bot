@@ -142,8 +142,8 @@ class RadiosondeNotifier:
         dlon = lon2_rad - lon1_rad
 
         a = (
-                math.sin(dlat / 2) ** 2
-                + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
         )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
@@ -167,18 +167,57 @@ class RadiosondeNotifier:
             return False
         return min_alt <= altitude <= max_alt
 
-    def is_descending(self, serial, current_altitude):
-        """Check if the radiosonde is descending"""
+    def is_descending(self, serial, current_altitude, current_time, sonde_timestamp):
+        """Check if the radiosonde is descending using proper altitude comparison"""
         if serial not in self.detected_sonde:
             # First detection, can't determine descent yet
             return False
 
-        previous_altitude = self.detected_sonde[serial].get("last_altitude")
-        if previous_altitude is None:
+        previous_data = self.detected_sonde[serial]
+        previous_altitude = previous_data.get("last_altitude")
+        previous_time = previous_data.get(
+            "last_sonde_time"
+        )  # Use sonde timestamp, not system time
+
+        if previous_altitude is None or previous_time is None:
             return False
 
-        # Consider descending if altitude decreased by at least 100 meters
-        return current_altitude < previous_altitude - 100
+        try:
+            # Convert timestamps to datetime objects for proper comparison
+            if isinstance(previous_time, str):
+                prev_dt = datetime.fromisoformat(previous_time.replace("Z", "+00:00"))
+            else:
+                prev_dt = previous_time
+
+            if isinstance(sonde_timestamp, str):
+                current_dt = datetime.fromisoformat(
+                    sonde_timestamp.replace("Z", "+00:00")
+                )
+            else:
+                current_dt = sonde_timestamp
+
+            # Calculate time difference in seconds
+            time_diff = (current_dt - prev_dt).total_seconds()
+
+            # Only check if we have recent data (within 10 minutes)
+            if time_diff > 600 or time_diff <= 0:
+                return False
+
+            # Calculate altitude change (positive means descending)
+            altitude_diff = previous_altitude - current_altitude
+
+            # Calculate descent rate (meters per second)
+            descent_rate = altitude_diff / time_diff
+
+            # Consider descending if:
+            # 1. Altitude decreased by at least 50 meters AND
+            # 2. Descent rate > 1.0 m/s (typical descent rate for falling sondes)
+            # 3. Time difference is reasonable (not too long)
+            return altitude_diff >= 50 and descent_rate > 1.0 and time_diff < 300
+
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Error parsing timestamps for descent detection: {e}")
+            return False
 
     def format_telegram_message(self, sonde_data, distance_km, event_type):
         """Format detailed Telegram message"""
@@ -215,9 +254,9 @@ class RadiosondeNotifier:
 
         # Add status information
         if event_type == "initial":
-            message += "📉 *Sonda este in cadere!*\n\n"
+            message += "📉 *Sonda detectata!*\n\n"
         elif event_type == "update":
-            message += "📉 *Sonda continua sa coboare!*\n\n"
+            message += "📉 *Sonda este in cadere!*\n\n"
         elif event_type == "landing":
             message += "🪂 *Sonda a aterizat!*\n\n"
 
@@ -328,7 +367,7 @@ class RadiosondeNotifier:
             logging.error(f"Eroare la adaugarea datelor in coada: {e}")
 
     async def process_sonde_data(self, sonde_data):
-        """Process incoming radiosonde data"""
+        """Process incoming radiosonde data with improved descent detection"""
         try:
             serial = sonde_data.get("serial")
             if not serial:
@@ -336,8 +375,8 @@ class RadiosondeNotifier:
 
             # Skip invalid data with encoding issues
             if (
-                    "rs41_subframe" in sonde_data
-                    and len(sonde_data["rs41_subframe"]) > 1000
+                "rs41_subframe" in sonde_data
+                and len(sonde_data["rs41_subframe"]) > 1000
             ):
                 logging.debug(
                     f"Skipping sonde data with large rs41_subframe for {serial}"
@@ -347,8 +386,12 @@ class RadiosondeNotifier:
             lat = sonde_data.get("lat")
             lon = sonde_data.get("lon")
             alt = sonde_data.get("alt")
+            sonde_time = sonde_data.get("datetime")
+            velocity_v = sonde_data.get(
+                "vel_v", 0
+            )  # Use vertical velocity if available
 
-            if lat is None or lon is None or alt is None:
+            if lat is None or lon is None or alt is None or sonde_time is None:
                 return
 
             # Check if within radius and altitude
@@ -356,10 +399,29 @@ class RadiosondeNotifier:
             within_altitude = self.is_within_altitude(alt)
 
             if within_radius and within_altitude:
-                # Check if the sonde is descending
-                is_descending = self.is_descending(serial, alt)
+                # Check if the sonde is descending using multiple methods
+                is_descending = False
+
+                # Method 1: Use vertical velocity if available (most reliable)
+                if velocity_v < -1.0:  # Negative vertical velocity means descending
+                    is_descending = True
+                    logging.info(
+                        f"Sonde {serial} descending based on vertical velocity: {velocity_v:.1f} m/s"
+                    )
+
+                # Method 2: Use altitude comparison if vertical velocity not available
+                elif not is_descending and serial in self.detected_sonde:
+                    is_descending = self.is_descending(
+                        serial, alt, time.time(), sonde_time
+                    )
+                    if is_descending:
+                        logging.info(
+                            f"Sonde {serial} descending based on altitude comparison"
+                        )
 
                 # Determine event type
+                event_type = None
+
                 if serial not in self.detected_sonde:
                     # First detection in target area
                     event_type = "initial"
@@ -367,18 +429,29 @@ class RadiosondeNotifier:
                         "first_detected": time.time(),
                         "last_position": (lat, lon),
                         "last_altitude": alt,
-                        "is_descending": False
+                        "last_update_time": time.time(),
+                        "last_sonde_time": sonde_time,  # Store sonde timestamp
+                        "is_descending": is_descending,
+                        "vertical_velocity": velocity_v,
                     }
                 elif alt < 100:  # Considered landing
                     event_type = "landing"
+                    is_descending = True  # Force descending for landing
                 elif is_descending:
                     event_type = "update"
                 else:
-                    # Sonde is in area but not descending, don't send notification
-                    # Still update tracking data but don't create event
+                    # Sonde is in area but not descending, update tracking but don't notify
                     if serial in self.detected_sonde:
-                        self.detected_sonde[serial]["last_position"] = (lat, lon)
-                        self.detected_sonde[serial]["last_altitude"] = alt
+                        self.detected_sonde[serial].update(
+                            {
+                                "last_position": (lat, lon),
+                                "last_altitude": alt,
+                                "last_update_time": time.time(),
+                                "last_sonde_time": sonde_time,
+                                "is_descending": is_descending,
+                                "vertical_velocity": velocity_v,
+                            }
+                        )
                     return
 
                 # Only send notifications for descending or landing sondes
@@ -399,15 +472,25 @@ class RadiosondeNotifier:
 
                 # Update tracking data
                 if serial in self.detected_sonde:
-                    self.detected_sonde[serial]["last_position"] = (lat, lon)
-                    self.detected_sonde[serial]["last_altitude"] = alt
-                    self.detected_sonde[serial]["is_descending"] = is_descending
+                    self.detected_sonde[serial].update(
+                        {
+                            "last_position": (lat, lon),
+                            "last_altitude": alt,
+                            "last_update_time": time.time(),
+                            "last_sonde_time": sonde_time,
+                            "is_descending": is_descending,
+                            "vertical_velocity": velocity_v,
+                        }
+                    )
 
             # Clean up old entries (sondes that left the area)
             self.cleanup_old_entries()
 
         except Exception as e:
             logging.error(f"Eroare la procesarea datelor sondei: {e}")
+            import traceback
+
+            logging.error(traceback.format_exc())
 
     async def sonde_processor(self):
         """Process sonde data from the queue"""
@@ -420,6 +503,67 @@ class RadiosondeNotifier:
                 break
             except Exception as e:
                 logging.error(f"Eroare in procesorul de date sonde: {e}")
+
+    def analyze_sonde_trend(self, serial, current_data):
+        """Analyze sonde data trend over multiple points for better descent detection"""
+        if serial not in self.detected_sonde:
+            return False
+
+        history = self.detected_sonde[serial].get("altitude_history", [])
+
+        # Store current altitude with timestamp
+        current_alt = current_data.get("alt")
+        current_time = current_data.get("datetime")
+
+        if current_alt is None or current_time is None:
+            return False
+
+        # Add to history (keep last 10 points)
+        history.append(
+            {
+                "altitude": current_alt,
+                "timestamp": current_time,
+                "time_received": time.time(),
+            }
+        )
+
+        if len(history) > 10:
+            history.pop(0)
+
+        self.detected_sonde[serial]["altitude_history"] = history
+
+        # Need at least 3 points to analyze trend
+        if len(history) < 3:
+            return False
+
+        # Calculate average descent rate over history
+        total_descent = 0
+        total_time = 0
+
+        for i in range(1, len(history)):
+            try:
+                alt_diff = history[i - 1]["altitude"] - history[i]["altitude"]
+                time_diff = (
+                    datetime.fromisoformat(
+                        history[i]["timestamp"].replace("Z", "+00:00")
+                    )
+                    - datetime.fromisoformat(
+                        history[i - 1]["timestamp"].replace("Z", "+00:00")
+                    )
+                ).total_seconds()
+
+                if time_diff > 0:
+                    total_descent += alt_diff
+                    total_time += time_diff
+            except (ValueError, TypeError):
+                continue
+
+        if total_time > 0:
+            avg_descent_rate = total_descent / total_time
+            # Consider descending if average rate > 0.5 m/s
+            return avg_descent_rate > 0.5
+
+        return False
 
     def cleanup_old_entries(self):
         """Remove old entries from tracking dictionaries"""
@@ -467,8 +611,8 @@ class RadiosondeNotifier:
 
         # Check if user is authorized (either in config or subscribed)
         is_authorized = (
-                str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
-                or str(chat_id) in self.subscribed_users
+            str(chat_id) == str(self.telegram_config.get("admin_chat_id", ""))
+            or str(chat_id) in self.subscribed_users
         )
 
         if text.startswith("/"):
@@ -494,7 +638,7 @@ class RadiosondeNotifier:
             elif command == "/help":
                 await self.cmd_help(chat_id)
             elif command == "/subscribers" and str(chat_id) == str(
-                    self.telegram_config.get("admin_chat_id", "")
+                self.telegram_config.get("admin_chat_id", "")
             ):
                 await self.cmd_subscribers(chat_id)
             else:
@@ -712,7 +856,7 @@ class RadiosondeNotifier:
             logging.error("Numar maxim de incercari de reconectare la SondeHub atins")
             return False
 
-        delay = self.reconnect_delay * (2 ** self.sondehub_reconnect_attempts)
+        delay = self.reconnect_delay * (2**self.sondehub_reconnect_attempts)
         self.sondehub_reconnect_attempts += 1
 
         logging.warning(
